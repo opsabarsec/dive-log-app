@@ -6,13 +6,14 @@ A full-stack dive log application built with Convex backend and modern web techn
 
 ## Overview
 
-Dive Log App is a real-time dive logging platform that allows divers to record their dive sessions, track buddies, monitor dive statistics, and maintain a comprehensive dive journal.
+Dive Log App is a real-time dive logging platform that allows divers to record their dive sessions, track buddies, monitor dive statistics, and maintain a comprehensive dive journal. You only need to register with your Google account and you are ready to go.
 
 ## Features
 
-- **Real-time Sync**: Powered by Convex for seamless data synchronization
-- **Dive Logging**: Record dive details including location, depth, duration, and conditions
-- **Buddy Management**: Track dive buddies and create dive groups
+- **Dive Logging**: Record dive details including location (connected to Google maps API), depth, duration, and conditions
+- **A photo and a webpage instead of a stamp**: To certify dives clubs normally have a stamp for paper logbooks. For each dive in this electronic form, you add the name of the club. A link to the club webpage can be entered manually but it is also suggested by the app through google search API. To further verify it and to make great memories each dive is certified the verification photo is required. The photo is added to a specific folder in google drive and the link to the photo is stored in the backend. 
+- **Safety checks**: On top of the above logging fields this app has a simple check for each logged dive: buddy check done and briefing done/received.
+  with the explanation for both. This reminds the diver of the essential safety procedures at every log. 
 - **Statistics**: Monitor total dives, depths, and dive history
 - **Cloud Backend**: Scalable Convex database with real-time updates
 - **Responsive UI**: Works on desktop and mobile devices
