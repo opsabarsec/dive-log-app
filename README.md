@@ -118,4 +118,4 @@ Marco Berta - [GitHub](https://github.com/opsabarsec)
 
 ---
 
-**Stay safe and happy diving! 🛜‍♀️**
+**Stay safe and happy diving!**
