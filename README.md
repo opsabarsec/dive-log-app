@@ -1,3 +1,5 @@
+![Dive Log App Hero Image](./assets/hero-dive.jpg)
+
 # Dive Log App
 
 A full-stack dive log application built with Convex backend and modern web technologies for tracking and logging scuba diving sessions.
