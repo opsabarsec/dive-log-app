@@ -40,6 +40,7 @@ export default defineSchema({
     clubWebsite: v.optional(v.string()),
     instructorName: v.optional(v.string()),
     notes: v.optional(v.string()),
+    photoStorageId: v.optional(v.id('_storage')),
     buddyIds: v.array(v.string()),
     equipment: v.array(v.string()),
     loggedAt: v.number(),

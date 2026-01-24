@@ -2,6 +2,13 @@ import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 
 /**
+ * Generate a URL for uploading dive photos
+ */
+export const generateUploadUrl = mutation(async (ctx) => {
+  return await ctx.storage.generateUploadUrl();
+});
+
+/**
  * Get all dives for a user
  */
 export const getDives = query({
@@ -38,6 +45,7 @@ export const createDive = mutation({
     clubWebsite: v.optional(v.string()),
     instructorName: v.optional(v.string()),
     notes: v.optional(v.string()),
+    photoStorageId: v.optional(v.id('_storage')),
     buddyIds: v.array(v.string()),
     equipment: v.array(v.string()),
   },
@@ -62,6 +70,7 @@ export const createDive = mutation({
       clubWebsite: args.clubWebsite,
       instructorName: args.instructorName,
       notes: args.notes,
+      photoStorageId: args.photoStorageId,
       buddyIds: args.buddyIds,
       equipment: args.equipment,
       loggedAt: Date.now(),
@@ -95,6 +104,7 @@ export const updateDive = mutation({
       clubWebsite: v.optional(v.string()),
       instructorName: v.optional(v.string()),
       notes: v.optional(v.string()),
+      photoStorageId: v.optional(v.id('_storage')),
       buddyIds: v.optional(v.array(v.string())),
       equipment: v.optional(v.array(v.string())),
     }),
@@ -179,5 +189,15 @@ export const getAutocompleteData = query({
       instructorNames: Array.from(instructorNames),
       clubWebsites: Object.fromEntries(clubWebsites),
     };
+  },
+});
+
+/**
+ * Get the URL for a dive photo
+ */
+export const getDivePhotoUrl = query({
+  args: { storageId: v.id('_storage') },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
   },
 });

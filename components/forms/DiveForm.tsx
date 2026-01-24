@@ -24,6 +24,7 @@ interface DiveFormProps {
  */
 export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
   const createDive = useMutation(api.dives.createDive);
+  const generateUploadUrl = useMutation(api.dives.generateUploadUrl);
   const autocompleteData = useQuery(api.dives.getAutocompleteData, { userId });
 
   const [location, setLocation] = useState<LocationData | null>(null);
@@ -44,6 +45,8 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
     instructorName: "",
     notes: "",
   });
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSearchingWebsite, setIsSearchingWebsite] = useState(false);
@@ -57,6 +60,35 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
   const handleLocationSelect = (selectedLocation: LocationData) => {
     setLocation(selectedLocation);
     console.log("Location selected:", selectedLocation);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select a valid image file');
+        return;
+      }
+      // Validate file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        setError('Image size must be less than 10MB');
+        return;
+      }
+      setSelectedPhoto(file);
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setPhotoPreview(previewUrl);
+      setError(null);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setSelectedPhoto(null);
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+      setPhotoPreview(null);
+    }
   };
 
   const handleInputChange = (
@@ -151,9 +183,29 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
       return;
     }
 
+    if (!selectedPhoto) {
+      setError("Please upload a photo to validate this dive");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      // Step 1: Upload the photo to Convex storage
+      const uploadUrl = await generateUploadUrl();
+      const uploadResult = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": selectedPhoto.type },
+        body: selectedPhoto,
+      });
+
+      if (!uploadResult.ok) {
+        throw new Error("Failed to upload photo");
+      }
+
+      const { storageId } = await uploadResult.json();
+
+      // Step 2: Create the dive with the photo storage ID
       const diveId = await createDive({
         userId,
         diveNumber: Number(formData.diveNumber),
@@ -174,6 +226,7 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
         clubWebsite: formData.clubWebsite || undefined,
         instructorName: formData.instructorName || undefined,
         notes: formData.notes || undefined,
+        photoStorageId: storageId,
         buddyIds: [],
         equipment: [],
       });
@@ -182,6 +235,7 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
 
       // Reset form
       setLocation(null);
+      handleRemovePhoto();
       setFormData({
         diveNumber: Number(formData.diveNumber) + 1, // Increment for next dive
         diveDate: new Date().toISOString().split("T")[0],
@@ -574,6 +628,107 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
         />
       </div>
 
+      {/* Photo Upload - Validation Field */}
+      <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          Dive Validation Photo <span className="text-red-600">*</span>
+        </h3>
+        <p className="text-sm text-blue-800 mb-4">
+          To validate this dive, please upload a related photo (e.g., underwater scene, dive site, dive buddy, or equipment)
+        </p>
+
+        {!selectedPhoto ? (
+          <div>
+            <label
+              htmlFor="photoUpload"
+              className="flex flex-col items-center justify-center w-full h-48 border-2 border-blue-300 border-dashed rounded-lg cursor-pointer bg-white hover:bg-blue-50 transition-colors"
+            >
+              <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <svg
+                  className="w-12 h-12 mb-3 text-blue-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  />
+                </svg>
+                <p className="mb-2 text-sm text-blue-700 font-semibold">
+                  Click to upload dive photo
+                </p>
+                <p className="text-xs text-blue-600">
+                  PNG, JPG, or JPEG (MAX. 10MB)
+                </p>
+              </div>
+              <input
+                id="photoUpload"
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="hidden"
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="relative rounded-lg overflow-hidden border-2 border-blue-300">
+              <img
+                src={photoPreview || ""}
+                alt="Dive photo preview"
+                className="w-full h-64 object-cover"
+              />
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
+                title="Remove photo"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-200">
+              <div className="flex items-center space-x-2">
+                <svg
+                  className="w-5 h-5 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+                <span className="text-sm font-medium text-gray-700">
+                  {selectedPhoto.name}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {(selectedPhoto.size / 1024 / 1024).toFixed(2)} MB
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Error Message */}
       {error && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -585,9 +740,9 @@ export default function DiveForm({ userId, onSuccess }: DiveFormProps) {
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={isSubmitting || !location}
+          disabled={isSubmitting || !location || !selectedPhoto}
           className={`px-6 py-3 rounded-lg font-semibold transition-colors ${
-            isSubmitting || !location
+            isSubmitting || !location || !selectedPhoto
               ? "bg-gray-300 text-gray-500 cursor-not-allowed"
               : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
