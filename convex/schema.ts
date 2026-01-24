@@ -23,6 +23,8 @@ export default defineSchema({
   dives: defineTable({
     userId: v.string(),
     location: v.string(),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
     site: v.optional(v.string()),
     diveDate: v.number(),
     duration: v.number(),
