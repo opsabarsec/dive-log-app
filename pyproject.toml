@@ -1,0 +1,78 @@
+[project]
+name = "dive-log-api"
+version = "0.1.0"
+description = "FastAPI CRUD API for dive logging (Convex schema compatible)"
+authors = [{ name = "Marco Berta", email = "your-email@example.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "uvicorn[standard]>=0.32.0",
+    "pydantic[email]>=2.9.2",
+    "pydantic-settings>=2.5.2",
+    "fastapi>=0.128.0",
+    "sqlalchemy>=2.0.46",
+    "httpx>=0.28.1",
+    "beautifulsoup4>=4.14.3",
+    "pytest>=9.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.7.0",
+    "black>=25.1.0",
+    "mypy>=1.13.1",
+    "pytest>=8.3.3",
+    "httpx>=0.27.2",
+    "pytest-asyncio>=0.24.0",
+]
+
+[project.scripts]
+dive-api = "main:app"
+
+[project.urls]
+Homepage = "https://github.com/opsabarsec/dive-log-app"
+Repository = "https://github.com/opsabarsec/dive-log-app"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unreachable = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--strict-markers --strict-config"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"main.py" = "main.py"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "hatch",
+    "ruff",
+    "black",
+    "mypy",
+]
+
+[tool.hatch.envs.default.scripts]
+fmt = "black ."
+lint = "ruff check ."
+lint-fix = "ruff check --fix ."
+typecheck = "mypy ."
+test = "pytest"
+pre-commit = "ruff check . && black . --check && mypy ."
