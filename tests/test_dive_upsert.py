@@ -1,7 +1,14 @@
 import os
 import time
+from typing import Dict, Any
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Set dummy CONVEX_URL for tests BEFORE importing app
+# Load .env file from project root
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
+# Set dummy CONVEX_URL for tests BEFORE importing app (only if not set in .env)
 if "CONVEX_URL" not in os.environ:
     os.environ["CONVEX_URL"] = "https://test.convex.cloud"
 
@@ -14,13 +21,13 @@ client = TestClient(app)
 
 
 @pytest.fixture
-def mock_convex_response():
+def mock_convex_response() -> Dict[str, Any]:
     """Mock successful Convex response"""
     return {"value": {"id": "test_dive_id_123", "action": "inserted"}}
 
 
 @pytest.fixture
-def valid_dive_data():
+def valid_dive_data() -> Dict[str, Any]:
     """Valid dive data for testing"""
     return {
         "user_id": "test-user-123",
@@ -33,7 +40,6 @@ def valid_dive_data():
         "duration": 45.0,
         "max_depth": 20.0,
         "temperature": 18.5,
-        "water_type": "saltwater",
         "visibility": 15.0,
         "weather": "sunny",
         "suit_thickness": 5.0,
@@ -43,14 +49,14 @@ def valid_dive_data():
         "instructor_name": "Marco Rossi",
         "notes": "Amazing dive at the Christ of the Abyss statue",
         "photo_storage_id": "photo_123",
-        "buddy_ids": ["buddy-1", "buddy-2"],
-        "equipment": ["BCD", "Regulator", "Wetsuit"],
+        "buddy_check": True,
+        "briefed": True,
         # logged_at and updated_at are server-generated
     }
 
 
 @pytest.fixture
-def minimal_dive_data():
+def minimal_dive_data() -> Dict[str, Any]:
     """Minimal required dive data"""
     return {
         "user_id": "test-user-456",
@@ -59,14 +65,14 @@ def minimal_dive_data():
         "location": "Red Sea",
         "duration": 30.0,
         "max_depth": 15.0,
-        "water_type": "saltwater",
-        "buddy_ids": [],
-        "equipment": [],
+        "club_name": "Red Sea Divers",
+        "instructor_name": "Ahmed Hassan",
+        "photo_storage_id": "photo_456",
         # logged_at and updated_at are server-generated
     }
 
 
-def test_upsert_dive_success(valid_dive_data, mock_convex_response):
+def test_upsert_dive_success(valid_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]) -> None:
     """Test successful dive upsert with all fields"""
     with patch("httpx.AsyncClient") as mock_client:
         # Mock the httpx response
@@ -87,7 +93,7 @@ def test_upsert_dive_success(valid_dive_data, mock_convex_response):
         mock_client.return_value.__aenter__.return_value.post.assert_called_once()
 
 
-def test_upsert_dive_minimal_fields(minimal_dive_data, mock_convex_response):
+def test_upsert_dive_minimal_fields(minimal_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]) -> None:
     """Test upsert with only required fields"""
     with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
@@ -104,7 +110,7 @@ def test_upsert_dive_minimal_fields(minimal_dive_data, mock_convex_response):
         assert response.json() == mock_convex_response["value"]
 
 
-def test_upsert_dive_server_managed_timestamps(valid_dive_data):
+def test_upsert_dive_server_managed_timestamps(valid_dive_data: Dict[str, Any]) -> None:
     """Test that logged_at and updated_at are NOT sent (server-managed)"""
     with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
@@ -127,7 +133,7 @@ def test_upsert_dive_server_managed_timestamps(valid_dive_data):
         assert response.status_code == 200
 
 
-def test_upsert_dive_missing_required_field():
+def test_upsert_dive_missing_required_field() -> None:
     """Test validation error when required field is missing"""
     invalid_data = {
         "user_id": "test-user",
@@ -140,7 +146,7 @@ def test_upsert_dive_missing_required_field():
     assert response.status_code == 422  # Validation error
 
 
-def test_upsert_dive_invalid_types():
+def test_upsert_dive_invalid_types() -> None:
     """Test validation error with invalid field types"""
     invalid_data = {
         "user_id": "test-user",
@@ -149,9 +155,9 @@ def test_upsert_dive_invalid_types():
         "location": "Test Location",
         "duration": "not-a-float",  # Should be float
         "max_depth": "not-a-float",  # Should be float
-        "water_type": "saltwater",
-        "buddy_ids": [],
-        "equipment": [],
+        "club_name": "Test Dive Club",
+        "instructor_name": "Test Instructor",
+        "photo_storage_id": "photo_test",
         "logged_at": int(time.time() * 1000),
         "updated_at": int(time.time() * 1000),
     }
@@ -161,8 +167,8 @@ def test_upsert_dive_invalid_types():
     assert response.status_code == 422
 
 
-def test_upsert_dive_empty_arrays():
-    """Test that empty arrays for buddy_ids and equipment are valid"""
+def test_upsert_dive_empty_arrays() -> None:
+    """Test basic dive upsert with minimal optional fields"""
     dive_data = {
         "user_id": "test-user",
         "dive_number": 1,
@@ -170,9 +176,9 @@ def test_upsert_dive_empty_arrays():
         "location": "Test Location",
         "duration": 30.0,
         "max_depth": 15.0,
-        "water_type": "saltwater",
-        "buddy_ids": [],  # Empty is valid
-        "equipment": [],  # Empty is valid
+        "club_name": "Test Dive Club",
+        "instructor_name": "Test Instructor",
+        "photo_storage_id": "photo_test",
     }
 
     with patch("httpx.AsyncClient") as mock_client:
@@ -189,7 +195,7 @@ def test_upsert_dive_empty_arrays():
         assert response.status_code == 200
 
 
-def test_upsert_dive_convex_api_call_format(valid_dive_data):
+def test_upsert_dive_convex_api_call_format(valid_dive_data: Dict[str, Any]) -> None:
     """Test that the Convex API is called with correct format"""
     with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
@@ -214,7 +220,7 @@ def test_upsert_dive_convex_api_call_format(valid_dive_data):
         assert response.status_code == 200
 
 
-def test_post_and_retrieve_dive():
+def test_post_and_retrieve_dive() -> None:
     """Test posting a dive and then retrieving it by ID"""
     # Create dive data with dive_number 1 (0001)
     dive_data = {
@@ -228,7 +234,6 @@ def test_post_and_retrieve_dive():
         "duration": 52.0,
         "max_depth": 25.0,
         "temperature": 26.0,
-        "water_type": "saltwater",
         "visibility": 30.0,
         "weather": "sunny",
         "suit_thickness": 3.0,
@@ -238,8 +243,8 @@ def test_post_and_retrieve_dive():
         "instructor_name": "Steve Irwin Jr",
         "notes": "Amazing dive with giant potato cod!",
         "photo_storage_id": "photo_001_gbr",
-        "buddy_ids": ["buddy-001"],
-        "equipment": ["BCD", "Regulator", "Wetsuit", "Fins"],
+        "buddy_check": True,
+        "briefed": True,
     }
 
     # Mock ID returned from Convex after insertion
@@ -309,7 +314,7 @@ def test_post_and_retrieve_dive():
         assert second_call.kwargs["json"]["args"]["id"] == created_dive_id
 
 
-def test_get_dive_not_found():
+def test_get_dive_not_found() -> None:
     """Test GET endpoint returns 404 for non-existent dive"""
     non_existent_id = "kg2nonexistent123456789"
 
@@ -334,7 +339,7 @@ def test_get_dive_not_found():
     os.environ.get("CONVEX_URL", "").startswith("https://test"),
     reason="Requires real Convex deployment (set CONVEX_URL env var)",
 )
-def test_post_and_retrieve_dive_real_convex():
+def test_post_and_retrieve_dive_real_convex() -> None:
     """
     Integration test: Actually post to Convex and retrieve the data.
     Requires real Convex deployment - set CONVEX_URL environment variable.
@@ -364,7 +369,6 @@ def test_post_and_retrieve_dive_real_convex():
         "duration": 52.0,
         "max_depth": 25.0,
         "temperature": 26.0,
-        "water_type": "saltwater",
         "visibility": 30.0,
         "weather": "sunny",
         "suit_thickness": 3.0,
@@ -374,8 +378,8 @@ def test_post_and_retrieve_dive_real_convex():
         "instructor_name": "Steve Irwin Jr",
         "notes": "Integration test dive - Amazing dive with giant potato cod!",
         "photo_storage_id": "photo_integration_001_gbr",
-        "buddy_ids": ["buddy-integration-001"],
-        "equipment": ["BCD", "Regulator", "Wetsuit", "Fins"],
+        "buddy_check": True,
+        "briefed": True,
     }
 
     # Step 1: POST the dive to real Convex
@@ -404,7 +408,6 @@ def test_post_and_retrieve_dive_real_convex():
     assert retrieved_data["duration"] == dive_data["duration"]
     assert retrieved_data["max_depth"] == dive_data["max_depth"]
     assert retrieved_data["temperature"] == dive_data["temperature"]
-    assert retrieved_data["water_type"] == dive_data["water_type"]
     assert retrieved_data["visibility"] == dive_data["visibility"]
     assert retrieved_data["weather"] == dive_data["weather"]
     assert retrieved_data["suit_thickness"] == dive_data["suit_thickness"]
@@ -414,8 +417,9 @@ def test_post_and_retrieve_dive_real_convex():
     assert retrieved_data["instructor_name"] == dive_data["instructor_name"]
     assert retrieved_data["notes"] == dive_data["notes"]
     assert retrieved_data["photo_storage_id"] == dive_data["photo_storage_id"]
-    assert retrieved_data["buddy_ids"] == dive_data["buddy_ids"]
-    assert retrieved_data["equipment"] == dive_data["equipment"]
+    # Note: Convex stores these with PascalCase field names
+    assert retrieved_data["Buddy_check"] == dive_data["buddy_check"]
+    assert retrieved_data["Briefed"] == dive_data["briefed"]
 
     # Verify Convex metadata fields exist
     assert "_id" in retrieved_data

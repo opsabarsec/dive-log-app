@@ -14,22 +14,26 @@ export const upsertDive = mutation({
     duration: v.number(),
     max_depth: v.number(),
     temperature: v.optional(v.number()),
-    water_type: v.string(),
     visibility: v.optional(v.number()),
     weather: v.optional(v.string()),
     suit_thickness: v.optional(v.number()),
     lead_weights: v.optional(v.number()),
-    club_name: v.optional(v.string()),
+
+    // REQUIRED
+    club_name: v.string(),
+    instructor_name: v.string(),
+    photo_storage_id: v.string(),
+
     club_website: v.optional(v.string()),
-    instructor_name: v.optional(v.string()),
     notes: v.optional(v.string()),
-    photo_storage_id: v.optional(v.string()),
-    buddy_ids: v.array(v.string()),
-    equipment: v.array(v.string()),
+
+    // Flags
+    Buddy_check: v.boolean(),
+    Briefed: v.boolean(),
   },
   handler: async (ctx, args) => {
     const { user_id, dive_number } = args;
-    const now = Date.now(); // ms since epoch
+    const now = Date.now();
 
     const existing = await ctx.db
       .query("dives")

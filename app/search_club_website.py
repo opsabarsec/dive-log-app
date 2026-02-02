@@ -8,7 +8,7 @@ import argparse
 import re
 import sys
 from urllib.parse import unquote, urlparse
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 
 import httpx
 
@@ -18,7 +18,7 @@ USER_AGENT = (
 )
 
 
-def search_club_website(query: str) -> Dict[str, any]:
+def search_club_website(query: str) -> Dict[str, Any]:
     """
     Search DuckDuckGo for club website, return first result URL.
 
@@ -108,7 +108,7 @@ def search_club_website(query: str) -> Dict[str, any]:
         }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Search for diving club websites using DuckDuckGo")
     parser.add_argument("query", nargs="?", help="Club name to search for")
     parser.add_argument(
