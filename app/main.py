@@ -6,15 +6,25 @@ import httpx
 import os
 import uvicorn
 
-# Import services
-from .services.geolocation import get_coordinates_async
-from .services.search_club_website import search_club_website
+# Service imports
+from app.services.geolocation import get_coordinates_async
+from app.services.search_club_website import search_club_website
+from dotenv import load_dotenv
 
+# Load .env file
+env_path = ".env"
+load_dotenv(env_path)
+
+
+CONVEX_URL = os.environ["CONVEX_URL"]
+print(CONVEX_URL)
 
 app = FastAPI()
 
-# Convex base URL (e.g., "https://friendly-finch-619.convex.cloud")
-CONVEX_URL = os.environ["CONVEX_URL"]
+
+# ---------------------------
+# Pydantic Models
+# ---------------------------
 
 
 class Dive(BaseModel):
@@ -42,36 +52,96 @@ class Dive(BaseModel):
     club_website: Optional[str] = None
     notes: Optional[str] = None
 
-    # Flags (using serialization_alias to match Convex PascalCase field names)
+    # Flags
     buddy_check: bool = Field(default=True, serialization_alias="Buddy_check")
     briefed: bool = Field(default=True, serialization_alias="Briefed")
+
+
+class ResolveMetadataRequest(BaseModel):
+    location_name: str
+    club_name: str
+
+
+class Coordinates(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class ResolveMetadataResponse(BaseModel):
+    location_name: str
+    coordinates: Optional[Coordinates] = None
+    osm_link: Optional[str] = None
+    club_name: str
+    club_website: Optional[str] = None
+
+
+# ---------------------------
+# Endpoints
+# ---------------------------
+
+
+@app.post("/resolve-dive-metadata", response_model=ResolveMetadataResponse)
+async def resolve_dive_metadata(payload: ResolveMetadataRequest) -> ResolveMetadataResponse:
+    """
+    Combined endpoint:
+      - Resolves geolocation (lat/lon + OSM link) from location_name
+      - Resolves club website from club_name
+    """
+
+    # --- Geolocation ---
+    lat = None
+    lon = None
+    osm_link = None
+
+    try:
+        coords = await get_coordinates_async(payload.location_name)
+        if coords:
+            lon, lat = coords
+            osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}"
+    except Exception:
+        pass
+
+    # --- Club website ---
+    club_website = None
+    try:
+        result = search_club_website(payload.club_name)
+        if result.get("success") and result.get("club_website"):
+            club_website = result["club_website"]
+    except Exception:
+        pass
+
+    return ResolveMetadataResponse(
+        location_name=payload.location_name,
+        coordinates=Coordinates(latitude=lat, longitude=lon)
+        if lat is not None and lon is not None
+        else None,
+        osm_link=osm_link,
+        club_name=payload.club_name,
+        club_website=club_website,
+    )
 
 
 @app.post("/dives/upsert")
 async def upsert_dive(dive: Dive) -> Any:
     """
-    Upsert a dive record into Convex.
-    - Automatically resolves coordinates using Nominatim if missing.
-    - Always generates an OpenStreetMap visualization link when coordinates are present.
+    Stores or updates a dive in Convex.
+    Automatically enriches missing geolocation info and OSM link.
     """
-    # --- Geolocation auto-fill ---
-    try:
-        if dive.latitude is None or dive.longitude is None:
+
+    # Auto-fill coordinates if missing
+    if dive.latitude is None or dive.longitude is None:
+        try:
             coords = await get_coordinates_async(dive.location)
             if coords:
-                # coords are [lon, lat]
                 dive.longitude, dive.latitude = coords
-    except Exception:
-        # If geolocation fails, proceed without blocking the upsert
-        pass
+        except Exception:
+            pass
 
-    # --- OSM link from coordinates (if available) ---
+    # Always generate OSM link if coordinates exist
     if dive.latitude is not None and dive.longitude is not None:
-        lat = dive.latitude
-        lon = dive.longitude
+        lat, lon = dive.latitude, dive.longitude
         dive.osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}"
 
-    # Prepare payload for Convex (respects aliases e.g., Buddy_check / Briefed)
     payload = dive.model_dump(by_alias=True)
 
     async with httpx.AsyncClient() as client:
@@ -86,10 +156,11 @@ async def upsert_dive(dive: Dive) -> Any:
         resp.raise_for_status()
         result = resp.json()
 
-    # Handle Convex error responses
+    # Convex errors
     if "error" in result:
         return JSONResponse(
-            status_code=400, content={"error": result["error"], "convex_error": True}
+            status_code=400,
+            content={"error": result["error"], "convex_error": True},
         )
 
     return result.get("value", result)
@@ -97,7 +168,7 @@ async def upsert_dive(dive: Dive) -> Any:
 
 @app.get("/dives/{dive_id}")
 async def get_dive_by_id(dive_id: str) -> Any:
-    """Get a single dive by its Convex document ID."""
+    """Retrieve a dive document by ID from Convex."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{CONVEX_URL}/api/query",
@@ -108,19 +179,19 @@ async def get_dive_by_id(dive_id: str) -> Any:
             },
         )
         resp.raise_for_status()
-        response_data = resp.json()
+        data = resp.json()
 
-    # Handle Convex error responses
-    if "error" in response_data:
+    if "error" in data:
         return JSONResponse(
             status_code=400,
-            content={"error": response_data["error"], "convex_error": True},
+            content={"error": data["error"], "convex_error": True},
         )
 
-    result = response_data.get("value")
+    result = data.get("value")
     if result is None:
         return JSONResponse(
-            status_code=404, content={"error": f"Dive with id '{dive_id}' not found"}
+            status_code=404,
+            content={"error": f"Dive with id '{dive_id}' not found"},
         )
 
     return result
@@ -128,15 +199,15 @@ async def get_dive_by_id(dive_id: str) -> Any:
 
 @app.get("/search-club")
 def search_club(q: str = Query(..., description="Club name")) -> Any:
-    """
-    Simple helper endpoint to search a club website.
-    """
+    """Search for a dive club website."""
     result = search_club_website(q)
-    if result["success"]:
+    if result.get("success"):
         return result
-    return JSONResponse(status_code=404 if "No results" in result["error"] else 500, content=result)
+    return JSONResponse(
+        status_code=404 if "No results" in result.get("error", "") else 500,
+        content=result,
+    )
 
 
 if __name__ == "__main__":
-    # Run the FastAPI app (development)
     uvicorn.run(app, host="0.0.0.0", port=8000)

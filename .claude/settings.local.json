@@ -9,7 +9,8 @@
       "Bash(export CONVEX_URL=https://friendly-finch-619.convex.cloud)",
       "Bash(uv pip install:*)",
       "Bash(npm run build:*)",
-      "Bash(npx convex:*)"
+      "Bash(npx convex:*)",
+      "Bash(uv run python:*)"
     ]
   }
 }

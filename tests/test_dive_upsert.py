@@ -34,7 +34,6 @@ def valid_dive_data() -> Dict[str, Any]:
         "location": "Portofino, Italy",
         "latitude": 44.3036653,
         "longitude": 9.2093446,
-        # ADDED osm_link
         "osm_link": "https://www.openstreetmap.org/?mlat=44.3036653&mlon=9.2093446#map=16/44.3036653/9.2093446",
         "site": "Cristo degli Abissi",
         "duration": 45.0,
