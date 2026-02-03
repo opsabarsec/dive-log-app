@@ -8,8 +8,12 @@ export const upsertDive = mutation({
     dive_number: v.number(),
     dive_date: v.number(),
     location: v.string(),
+
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
+    // NEW: Accept osm_link from the API layer
+    osm_link: v.optional(v.string()),
+
     site: v.optional(v.string()),
     duration: v.number(),
     max_depth: v.number(),
@@ -23,7 +27,6 @@ export const upsertDive = mutation({
     club_name: v.string(),
     instructor_name: v.string(),
     photo_storage_id: v.string(),
-
     club_website: v.optional(v.string()),
     notes: v.optional(v.string()),
 

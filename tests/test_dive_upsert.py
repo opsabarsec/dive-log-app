@@ -2,33 +2,31 @@ import os
 import time
 from typing import Dict, Any
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Load .env file from project root
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(env_path)
-
-# Set dummy CONVEX_URL for tests BEFORE importing app (only if not set in .env)
-if "CONVEX_URL" not in os.environ:
-    os.environ["CONVEX_URL"] = "https://test.convex.cloud"
 
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch, MagicMock
 from app.main import app
 
+from dotenv import load_dotenv
+
+# Load .env file
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
+if "CONVEX_URL" not in os.environ:
+    os.environ["CONVEX_URL"] = "https://test.convex.cloud"
+
 client = TestClient(app)
 
 
 @pytest.fixture
 def mock_convex_response() -> Dict[str, Any]:
-    """Mock successful Convex response"""
     return {"value": {"id": "test_dive_id_123", "action": "inserted"}}
 
 
 @pytest.fixture
 def valid_dive_data() -> Dict[str, Any]:
-    """Valid dive data for testing"""
     return {
         "user_id": "test-user-123",
         "dive_number": 1,
@@ -36,6 +34,8 @@ def valid_dive_data() -> Dict[str, Any]:
         "location": "Portofino, Italy",
         "latitude": 44.3036653,
         "longitude": 9.2093446,
+        # ADDED osm_link
+        "osm_link": "https://www.openstreetmap.org/?mlat=44.3036653&mlon=9.2093446#map=16/44.3036653/9.2093446",
         "site": "Cristo degli Abissi",
         "duration": 45.0,
         "max_depth": 20.0,
@@ -47,17 +47,15 @@ def valid_dive_data() -> Dict[str, Any]:
         "club_name": "Portofino Divers",
         "club_website": "https://portofinodivers.com",
         "instructor_name": "Marco Rossi",
-        "notes": "Amazing dive at the Christ of the Abyss statue",
+        "notes": "Amazing dive",
         "photo_storage_id": "photo_123",
         "buddy_check": True,
         "briefed": True,
-        # logged_at and updated_at are server-generated
     }
 
 
 @pytest.fixture
 def minimal_dive_data() -> Dict[str, Any]:
-    """Minimal required dive data"""
     return {
         "user_id": "test-user-456",
         "dive_number": 2,
@@ -68,32 +66,35 @@ def minimal_dive_data() -> Dict[str, Any]:
         "club_name": "Red Sea Divers",
         "instructor_name": "Ahmed Hassan",
         "photo_storage_id": "photo_456",
-        # logged_at and updated_at are server-generated
     }
 
 
-def test_upsert_dive_success(valid_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]) -> None:
+def test_upsert_dive_success(
+    valid_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]
+) -> None:
     """Test successful dive upsert with all fields"""
     with patch("httpx.AsyncClient") as mock_client:
-        # Mock the httpx response
         mock_response = MagicMock()
         mock_response.json = MagicMock(return_value=mock_convex_response)
         mock_response.raise_for_status = MagicMock()
-
         mock_client.return_value.__aenter__.return_value.post = AsyncMock(
             return_value=mock_response
         )
 
         response = client.post("/dives/upsert", json=valid_dive_data)
-
         assert response.status_code == 200
         assert response.json() == mock_convex_response["value"]
 
-        # Verify the Convex API was called
-        mock_client.return_value.__aenter__.return_value.post.assert_called_once()
+        call_args = mock_client.return_value.__aenter__.return_value.post.call_args
+        sent_args = call_args.kwargs["json"]["args"]
+        # ADDED: ensure osm_link was included in payload sent to Convex
+        assert "osm_link" in sent_args
+        assert sent_args["osm_link"] == valid_dive_data["osm_link"]
 
 
-def test_upsert_dive_minimal_fields(minimal_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]) -> None:
+def test_upsert_dive_minimal_fields(
+    minimal_dive_data: Dict[str, Any], mock_convex_response: Dict[str, Any]
+) -> None:
     """Test upsert with only required fields"""
     with patch("httpx.AsyncClient") as mock_client:
         mock_response = MagicMock()
@@ -335,6 +336,7 @@ def test_get_dive_not_found() -> None:
         assert non_existent_id in response.json()["error"]
 
 
+# INTEGRATION TEST
 @pytest.mark.skipif(
     os.environ.get("CONVEX_URL", "").startswith("https://test"),
     reason="Requires real Convex deployment (set CONVEX_URL env var)",
