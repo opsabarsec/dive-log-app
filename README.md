@@ -17,28 +17,19 @@ This backend is designed to support a modern dive‑logging application where th
 
 ## ✨ Features
 
-### ✅ **Dive Upsert API**
+### 📷 **Photo Upload & Dive Logging**
 
-Create or update a dive entry using `/dives/upsert`.
-The backend will automatically:
+Upload dive photos as proof of your dive. This is a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and automatically linked to dive records.
 
-*   Geocode the location (if missing latitude/longitude)
-*   Generate an OpenStreetMap link (`osm_link`)
-*   Look up the club website (if `club_website` not provided)
-*   Validate all required dive metadata
-*   Store the dive record in your Convex deployment
-
-### 📷 **Photo Upload & Storage together with dive data logging**
-
-Upload dive photos as proof of your dive, This is a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and automatically linked to dive records.
-
-
-*   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form)
-*   Photo is automatically linked to the dive record
-
-
-**Retrieve photos:**
+*   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form). The backend will automatically:
+    *   Geocode the location (if missing latitude/longitude)
+    *   Generate an OpenStreetMap link (`osm_link`)
+    *   Look up the club website (if `club_website` not provided)
+    *   Validate all required dive metadata
+    *   Store the dive record in your Convex deployment
+*   **POST `/upload-photo`** — Upload photo only (returns `photo_storage_id`)
 *   **GET `/download-photo/{storage_id}`** — Download a stored photo
+*   **GET `/dives/{dive_id}`** — Retrieve a dive record by ID
 
 
 ### 🌍 **Geolocation Service**
@@ -50,11 +41,6 @@ Located in `app/services/geolocation.py`, featuring:
 *   24h in-memory caching
 *   Automatic OSM link builder
 *   Helpful User-Agent and optional email per Nominatim policy
-
-### 🔍 **Dive Club Website Search**
-
-The endpoint `/search-club` searches the internet for the official website of a dive club.
-
 
 ### 🔗 **Combined Metadata Resolver**
 
@@ -94,9 +80,9 @@ Perfect for auto‑filling frontend dive log forms.
      ├── __init__.py
      ├── convex_storage_inspector.py   # utility to inspect/download stored files
      ├── convex_test.py
-     ├── test_dive_upsert.py
-     ├── test_resolve_dive_metadata.py
-     └── test_upload_photo.py          # photo upload integration tests
+     ├── test_resolve_dive_metadata.py # metadata resolver tests (mocked)
+     ├── test_upload_photo.py          # photo upload integration tests
+     └── test_upsert_with_photo.py     # combined upload+upsert integration tests
 
 ***
 
@@ -162,13 +148,9 @@ CONVEX_URL=https://friendly-finch-619.convex.cloud uv run pytest -k real_convex 
 
 ## 📡 API Endpoints Overview
 
-### **POST /upload-photo**
-
-Upload a dive photo (JPEG, PNG, BMP). Returns `{ "photo_storage_id": "..." }`.
-
 ### **POST /dives/upsert-with-photo** ⭐ Recommended
 
-Combined endpoint: upload photo and create dive in **one request**.
+Combined endpoint: upload photo and create dive in **one request**. Auto-enriches coordinates, OSM link, and club website.
 
 ```bash
 curl -X POST /dives/upsert-with-photo \
@@ -178,25 +160,27 @@ curl -X POST /dives/upsert-with-photo \
 
 Returns `{ "photo_storage_id": "...", "dive": {...} }`.
 
+### **POST /resolve-dive-metadata**
+
+Preview resolved metadata before submission. Returns coordinates, OSM link, and club website for a given location & club name.
+
+```bash
+curl -X POST /resolve-dive-metadata \
+  -H "Content-Type: application/json" \
+  -d '{"location_name":"Portofino, Italy","club_name":"Portofino Divers"}'
+```
+
+### **POST /upload-photo**
+
+Upload a dive photo only (JPEG, PNG, BMP). Returns `{ "photo_storage_id": "..." }`.
+
 ### **GET /download-photo/{storage_id}**
 
 Download a stored photo by its Convex storage ID.
 
-### **POST /resolve-dive-metadata**
+### **GET /dives/{dive_id}**
 
-Returns coordinates, OSM link, and website for a given location & club.
-
-### **POST /dives/upsert**
-
-Creates or updates a dive record in Convex. Requires `photo_storage_id` from `/upload-photo`. Auto-enriches missing coordinates, OSM link, and club website.
-
-### **GET /dives/{id}**
-
-Retrieves a stored dive (includes photo_storage_id for fetching the photo).
-
-### **GET /search-club?q=Club Name**
-
-Returns the official dive club website, if found.
+Retrieves a stored dive record (includes `photo_storage_id` for fetching the photo).
 
 ***
 
@@ -245,9 +229,9 @@ npx convex deploy
 
 The frontend can now:
 
-1.  Call `/resolve-dive-metadata` with location & club name
-2.  Pre-fill the dive form with returned metadata
-3.  Submit the completed dive via `/dives/upsert`
+1.  Call `/resolve-dive-metadata` with location & club name to preview coordinates and club website
+2.  Pre-fill the dive form with returned metadata (show map preview, club link)
+3.  Submit the completed dive with photo via `/dives/upsert-with-photo`
 
 Smooth user experience + clean backend = 💙
 
