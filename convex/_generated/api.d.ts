@@ -9,6 +9,7 @@
  */
 
 import type * as dives from "../dives.js";
+import type * as files from "../files.js";
 
 import type {
   ApiFromModules,
@@ -18,6 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   dives: typeof dives;
+  files: typeof files;
 }>;
 
 /**
