@@ -44,7 +44,7 @@ The endpoint `/search-club` searches the internet for the official website of a 
 
 ### 📷 **Photo Upload & Storage**
 
-Upload dive photos as proof of your dive—a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and linked to dive records.
+Upload dive photos as proof of your dive, This is a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and automatically linked to dive records.
 
 **Recommended: Single-request workflow**
 *   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form)
@@ -120,7 +120,7 @@ source .venv/bin/activate  # or .\.venv\Scripts\activate on Windows
 ### 3. Install dependencies
 
 ```bash
-uv pip install -r requirements.txt
+uv sync
 ```
 
 ***
