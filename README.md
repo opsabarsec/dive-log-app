@@ -28,6 +28,19 @@ The backend will automatically:
 *   Validate all required dive metadata
 *   Store the dive record in your Convex deployment
 
+### 📷 **Photo Upload & Storage together with dive data logging**
+
+Upload dive photos as proof of your dive, This is a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and automatically linked to dive records.
+
+
+*   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form)
+*   Photo is automatically linked to the dive record
+
+
+**Retrieve photos:**
+*   **GET `/download-photo/{storage_id}`** — Download a stored photo
+
+
 ### 🌍 **Geolocation Service**
 
 Located in `app/services/geolocation.py`, featuring:
@@ -42,20 +55,6 @@ Located in `app/services/geolocation.py`, featuring:
 
 The endpoint `/search-club` searches the internet for the official website of a dive club.
 
-### 📷 **Photo Upload & Storage**
-
-Upload dive photos as proof of your dive, This is a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and automatically linked to dive records.
-
-**Recommended: Single-request workflow**
-*   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form)
-*   Photo is automatically linked to the dive record
-
-**Alternative: Two-step workflow**
-*   **POST `/upload-photo`** — Upload image, receive `photo_storage_id`
-*   **POST `/dives/upsert`** — Submit dive with the `photo_storage_id`
-
-**Retrieve photos:**
-*   **GET `/download-photo/{storage_id}`** — Download a stored photo
 
 ### 🔗 **Combined Metadata Resolver**
 
