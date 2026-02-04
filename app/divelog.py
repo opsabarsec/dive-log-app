@@ -41,9 +41,7 @@ class DiveInput(BaseModel):
     longitude: Optional[float] = None
     osm_link: Optional[str] = None
     site: Optional[str] = None
-    temperature: Optional[float] = None
-    visibility: Optional[float] = None
-    weather: Optional[str] = None
+    water_temperature: Optional[float] = None
     suit_thickness: Optional[float] = None
     lead_weights: Optional[float] = None
     club_website: Optional[str] = None

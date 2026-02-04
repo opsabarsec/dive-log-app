@@ -5,14 +5,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env before importing app to ensure env vars are available at module load time
+# Load .env BEFORE importing app to ensure env vars are available at module load time
 load_dotenv()
 
 from fastapi.testclient import TestClient
 from starlette import status
 
-from app.main import app
-
+from app.divelog import app
 
 client = TestClient(app)
 
@@ -37,9 +36,7 @@ def _get_sample_dive_data() -> dict:
         "club_name": "Test Dive Club",
         "instructor_name": "John Doe",
         "site": "Coral Gardens",
-        "temperature": 24.0,
-        "visibility": 15.0,
-        "weather": "Sunny",
+        "water_temperature": 24.0,
         "suit_thickness": 3.0,
         "lead_weights": 4.0,
         "notes": "Integration test dive",

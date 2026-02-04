@@ -17,9 +17,7 @@ export const upsertDive = mutation({
     site: v.optional(v.string()),
     duration: v.number(),
     max_depth: v.number(),
-    temperature: v.optional(v.number()),
-    visibility: v.optional(v.number()),
-    weather: v.optional(v.string()),
+    water_temperature: v.optional(v.number()),
     suit_thickness: v.optional(v.number()),
     lead_weights: v.optional(v.number()),
 
