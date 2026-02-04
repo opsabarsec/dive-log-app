@@ -1,7 +1,8 @@
-from typing import Optional, Any
+from typing import Optional, Any, Union
+from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Response, Form
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import httpx
 import os
 import json
@@ -30,7 +31,7 @@ class DiveInput(BaseModel):
 
     user_id: str
     dive_number: int
-    dive_date: int
+    dive_date: Union[int, str]  # Accepts epoch (int) or "YYYY-MM-DD" string
     location: str
     duration: float
     max_depth: float
@@ -49,6 +50,20 @@ class DiveInput(BaseModel):
 
     buddy_check: bool = Field(default=True, serialization_alias="Buddy_check")
     briefed: bool = Field(default=True, serialization_alias="Briefed")
+
+    @field_validator("dive_date", mode="before")
+    @classmethod
+    def parse_dive_date(cls, v: Union[int, str]) -> int:
+        """Convert 'YYYY-MM-DD' string to epoch timestamp, or pass through int."""
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            try:
+                dt = datetime.strptime(v, "%Y-%m-%d")
+                return int(dt.timestamp())
+            except ValueError:
+                raise ValueError(f"Invalid date format: {v}. Use 'YYYY-MM-DD' or epoch timestamp.")
+        raise ValueError(f"dive_date must be int or string, got {type(v)}")
 
 
 class Dive(DiveInput):
@@ -332,13 +347,13 @@ async def upsert_dive_with_photo(
     if dive.club_website is None and dive.club_name:
         try:
             result = search_club_website(dive.club_name)
-            if result.get("success") and result.get("club_website"):
-                dive.club_website = result["club_website"]
+            if result.get("success") and result.get("url"):
+                dive.club_website = result["url"]
         except Exception:
             pass
 
     # 7. Upsert to Convex
-    payload = dive.model_dump(by_alias=True)
+    payload = dive.model_dump(by_alias=True, exclude_none=True)
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
