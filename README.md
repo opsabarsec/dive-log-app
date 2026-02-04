@@ -75,7 +75,7 @@ and returns:
 *   Club website
 *   Cleaned metadata
 
-Perfect for auto‑filling frontend die log forms.
+Perfect for auto‑filling frontend dive log forms.
 
 ***
 

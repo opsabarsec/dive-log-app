@@ -27,6 +27,7 @@ app = FastAPI()
 
 class DiveInput(BaseModel):
     """Dive data for combined upload endpoint (photo_storage_id auto-filled)."""
+
     user_id: str
     dive_number: int
     dive_date: int
@@ -54,6 +55,7 @@ class DiveInput(BaseModel):
 
 class Dive(DiveInput):
     """Full dive model including photo_storage_id."""
+
     photo_storage_id: str
 
 
@@ -66,6 +68,13 @@ class Coordinates(BaseModel):
     latitude: float
     longitude: float
 
+
+class ResolveMetadataResponse(BaseModel):
+    location_name: str
+    coordinates: Optional[Coordinates] = None
+    osm_link: Optional[str] = None
+    club_name: str
+    club_website: Optional[str] = None
 
 
 # ---------------------------------------------------------
@@ -187,9 +196,54 @@ async def download_photo(storage_id: str) -> Response | JSONResponse:
 
 
 # ---------------------------------------------------------
-# Upsert dive data and photo
+# Resolve Dive Metadata
 # ---------------------------------------------------------
 
+
+@app.post("/resolve-dive-metadata", response_model=ResolveMetadataResponse)
+async def resolve_dive_metadata(payload: ResolveMetadataRequest) -> ResolveMetadataResponse:
+    """
+    Resolve metadata for a dive before submission.
+
+    - Coordinates + OSM link from location_name
+    - Club website from club_name
+
+    Use this endpoint to preview resolved data in the frontend
+    before submitting via /dives/upsert-with-photo.
+    """
+    lat, lon = None, None
+    osm_link = None
+
+    try:
+        coords = await get_coordinates_async(payload.location_name)
+        if coords:
+            lon, lat = coords
+            osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}"
+    except Exception:
+        pass
+
+    club_website = None
+    try:
+        result = search_club_website(payload.club_name)
+        if result.get("success") and result.get("club_website"):
+            club_website = result["club_website"]
+    except Exception:
+        pass
+
+    return ResolveMetadataResponse(
+        location_name=payload.location_name,
+        coordinates=Coordinates(latitude=lat, longitude=lon)
+        if lat is not None and lon is not None
+        else None,
+        osm_link=osm_link,
+        club_name=payload.club_name,
+        club_website=club_website,
+    )
+
+
+# ---------------------------------------------------------
+# Upsert dive data and photo
+# ---------------------------------------------------------
 
 
 @app.post("/dives/upsert-with-photo", response_model=None)
@@ -307,7 +361,6 @@ async def upsert_dive_with_photo(
     }
 
 
-
 # ---------------------------------------------------------
 # Get Dive by ID
 # ---------------------------------------------------------
@@ -339,9 +392,11 @@ async def get_dive_by_id(dive_id: str) -> Any:
 
     return result
 
+
 # ---------------------------------------------------------
 # Run
 # ---------------------------------------------------------
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
