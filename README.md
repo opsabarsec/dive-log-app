@@ -41,6 +41,19 @@ Located in `app/services/geolocation.py`, featuring:
 
 The endpoint `/search-club` searches the internet for the official website of a dive club.
 
+### 📷 **Photo Upload & Storage**
+
+Upload dive photos as proof of your dive—a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and linked to dive records.
+
+*   **POST `/upload-photo`** — Upload an image (JPEG, PNG, BMP) and receive a `photo_storage_id`
+*   **GET `/download-photo/{storage_id}`** — Retrieve a stored photo by its storage ID
+*   The `photo_storage_id` is a **required field** when creating/updating dives via `/dives/upsert`
+
+**Workflow:**
+1.  Upload a photo via `/upload-photo`
+2.  Receive the `photo_storage_id` in the response
+3.  Include this ID when submitting the dive record
+
 ### 🔗 **Combined Metadata Resolver**
 
 The endpoint `/resolve-dive-metadata` takes:
@@ -66,15 +79,22 @@ Perfect for auto‑filling frontend die log forms.
 ## 🏗️ Project Structure
 
     app/
-     ├── main.py                  # FastAPI app & endpoints
-     ├── services/
-     │     ├── geolocation.py     # async geocoder + caching + OSM link builder
-     │     └── search_club_website.py
-     └── tests/
-           └── test_dive_upsert.py
+     ├── __init__.py
+     ├── main.py                       # FastAPI app & endpoints (incl. photo upload/download)
+     └── services/
+           ├── geolocation.py          # async geocoder + caching + OSM link builder
+           └── search_club_website.py  # dive club website scraper
     convex/
-     ├── schema.ts                # Convex schema (TypeScript)
-     └── dives.ts                 # Convex mutations & queries
+     ├── schema.ts                     # Convex schema (dives table with photo_storage_id)
+     ├── dives.ts                      # Convex mutations & queries
+     └── files.ts                      # Convex file storage (generateUploadUrl mutation)
+    tests/
+     ├── __init__.py
+     ├── convex_storage_inspector.py   # utility to inspect/download stored files
+     ├── convex_test.py
+     ├── test_dive_upsert.py
+     ├── test_resolve_dive_metadata.py
+     └── test_upload_photo.py          # photo upload integration tests
 
 ***
 
@@ -140,17 +160,25 @@ CONVEX_URL=https://friendly-finch-619.convex.cloud uv run pytest -k real_convex 
 
 ## 📡 API Endpoints Overview
 
+### **POST /upload-photo**
+
+Upload a dive photo (JPEG, PNG, BMP). Returns `{ "photo_storage_id": "..." }`.
+
+### **GET /download-photo/{storage_id}**
+
+Download a stored photo by its Convex storage ID.
+
 ### **POST /resolve-dive-metadata**
 
 Returns coordinates, OSM link, and website for a given location & club.
 
 ### **POST /dives/upsert**
 
-Creates or updates a dive record in Convex.
+Creates or updates a dive record in Convex. Requires `photo_storage_id` from `/upload-photo`.
 
 ### **GET /dives/{id}**
 
-Retrieves a stored dive.
+Retrieves a stored dive (includes photo_storage_id for fetching the photo).
 
 ### **GET /search-club?q=Club Name**
 
@@ -181,7 +209,13 @@ Dive schema includes:
 *   Required dive metadata
 *   Optional attributes (notes, site, temperature, etc.)
 *   Auto-updated fields: `logged_at`, `updated_at`
-*   New field: `osm_link`
+*   `osm_link` for map visualization
+*   `photo_storage_id` (required) — links to Convex file storage
+
+**File Storage:**
+*   Photos are stored in Convex's built-in file storage
+*   `files.ts` exposes a `generateUploadUrl` mutation for secure uploads
+*   Storage IDs are stable references to uploaded files
 
 Convex table is typed and indexed via `schema.ts` and `dives.ts`.
 
