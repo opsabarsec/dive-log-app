@@ -1,9 +1,10 @@
 from typing import Optional, Any
-from fastapi import FastAPI, Query, UploadFile, File, Response
+from fastapi import FastAPI, UploadFile, File, Response, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import httpx
 import os
+import json
 import uvicorn
 
 # Service imports
@@ -24,7 +25,8 @@ app = FastAPI()
 # ---------------------------------------------------------
 
 
-class Dive(BaseModel):
+class DiveInput(BaseModel):
+    """Dive data for combined upload endpoint (photo_storage_id auto-filled)."""
     user_id: str
     dive_number: int
     dive_date: int
@@ -33,7 +35,6 @@ class Dive(BaseModel):
     max_depth: float
     club_name: str
     instructor_name: str
-    photo_storage_id: str  # REQUIRED - now comes from `/upload-photo`
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -51,6 +52,11 @@ class Dive(BaseModel):
     briefed: bool = Field(default=True, serialization_alias="Briefed")
 
 
+class Dive(DiveInput):
+    """Full dive model including photo_storage_id."""
+    photo_storage_id: str
+
+
 class ResolveMetadataRequest(BaseModel):
     location_name: str
     club_name: str
@@ -60,13 +66,6 @@ class Coordinates(BaseModel):
     latitude: float
     longitude: float
 
-
-class ResolveMetadataResponse(BaseModel):
-    location_name: str
-    coordinates: Optional[Coordinates] = None
-    osm_link: Optional[str] = None
-    club_name: str
-    club_website: Optional[str] = None
 
 
 # ---------------------------------------------------------
@@ -132,11 +131,6 @@ async def upload_photo(file: UploadFile = File(...)) -> dict[str, str] | JSONRes
     return {"photo_storage_id": storage_id}
 
 
-# ---------------------------------------------------------
-# Combined Metadata Resolver
-# ---------------------------------------------------------
-
-
 @app.get("/download-photo/{storage_id}", response_model=None)
 async def download_photo(storage_id: str) -> Response | JSONResponse:
     """
@@ -192,61 +186,85 @@ async def download_photo(storage_id: str) -> Response | JSONResponse:
     )
 
 
-@app.post("/resolve-dive-metadata", response_model=ResolveMetadataResponse)
-async def resolve_dive_metadata(payload: ResolveMetadataRequest) -> ResolveMetadataResponse:
-    """
-    Resolve:
-    - coordinates + OSM link from location_name
-    - club_website from club_name
-    """
-
-    # --- Geolocation ---
-    lat, lon = None, None
-    osm_link = None
-
-    try:
-        coords = await get_coordinates_async(payload.location_name)
-        if coords:
-            lon, lat = coords
-            osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}"
-    except Exception:
-        pass
-
-    # --- Club website lookup ---
-    club_website = None
-    try:
-        result = search_club_website(payload.club_name)
-        if result.get("success") and result.get("club_website"):
-            club_website = result["club_website"]
-    except Exception:
-        pass
-
-    return ResolveMetadataResponse(
-        location_name=payload.location_name,
-        coordinates=Coordinates(latitude=lat, longitude=lon)
-        if lat is not None and lon is not None
-        else None,
-        osm_link=osm_link,
-        club_name=payload.club_name,
-        club_website=club_website,
-    )
-
-
 # ---------------------------------------------------------
-# Upsert Dive
+# Upsert dive data and photo
 # ---------------------------------------------------------
 
 
-@app.post("/dives/upsert")
-async def upsert_dive(dive: Dive) -> Any:
-    """
-    Upsert dive into Convex.
-    Automatically enriches:
-    - coordinates
-    - OSM link
-    """
 
-    # Fill missing geolocation data
+@app.post("/dives/upsert-with-photo", response_model=None)
+async def upsert_dive_with_photo(
+    file: UploadFile = File(..., description="Dive photo (JPEG, PNG, BMP)"),
+    dive_data: str = Form(..., description="Dive data as JSON string"),
+) -> dict[str, Any] | JSONResponse:
+    """
+    Combined endpoint: upload photo and upsert dive data in one request.
+
+    - Accepts multipart form with photo file and dive JSON
+    - Uploads photo to Convex storage
+    - Auto-enriches coordinates, OSM link, and club website
+    - Upserts dive with linked photo_storage_id
+
+    Example curl:
+        curl -X POST /dives/upsert-with-photo \
+            -F "file=@dive.jpg" \
+            -F 'dive_data={"user_id":"u1","dive_number":1,...}'
+    """
+    # 1. Validate file type
+    allowed = {"image/png", "image/jpeg", "image/bmp"}
+    if file.content_type not in allowed:
+        return JSONResponse(
+            status_code=400, content={"error": f"Unsupported file type: {file.content_type}"}
+        )
+
+    # 2. Parse dive data JSON
+    try:
+        dive_dict = json.loads(dive_data)
+        dive_input = DiveInput(**dive_dict)
+    except json.JSONDecodeError as e:
+        return JSONResponse(status_code=400, content={"error": f"Invalid JSON: {str(e)}"})
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": f"Invalid dive data: {str(e)}"})
+
+    # 3. Upload photo to Convex storage
+    file_bytes = await file.read()
+
+    try:
+        async with httpx.AsyncClient() as client:
+            headers = {"Content-Type": "application/json"}
+            if CONVEX_AUTH_TOKEN:
+                headers["Authorization"] = f"Bearer {CONVEX_AUTH_TOKEN}"
+
+            url_resp = await client.post(
+                f"{CONVEX_URL}/api/run/files.js/generateUploadUrl",
+                headers=headers,
+                json={"args": {}, "format": "json"},
+            )
+            url_resp.raise_for_status()
+            signed_url = url_resp.json().get("value")
+            if not signed_url:
+                return JSONResponse(status_code=500, content={"error": "Failed to get upload URL"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Upload URL failed: {str(e)}"})
+
+    try:
+        async with httpx.AsyncClient() as client:
+            upload_resp = await client.post(
+                signed_url,
+                headers={"Content-Type": file.content_type},
+                content=file_bytes,
+            )
+            upload_resp.raise_for_status()
+            storage_id = upload_resp.json().get("storageId")
+            if not storage_id:
+                return JSONResponse(status_code=500, content={"error": "No storageId returned"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Photo upload failed: {str(e)}"})
+
+    # 4. Create full Dive with photo_storage_id
+    dive = Dive(**dive_input.model_dump(), photo_storage_id=storage_id)
+
+    # 5. Enrich with geolocation
     if dive.latitude is None or dive.longitude is None:
         try:
             coords = await get_coordinates_async(dive.location)
@@ -255,21 +273,25 @@ async def upsert_dive(dive: Dive) -> Any:
         except Exception:
             pass
 
-    # Always generate OSM link if coords found
     if dive.latitude and dive.longitude:
-        lat, lon = dive.latitude, dive.longitude
-        dive.osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}"
+        dive.osm_link = f"https://www.openstreetmap.org/?mlat={dive.latitude}&mlon={dive.longitude}#map=16/{dive.latitude}/{dive.longitude}"
 
+    # 6. Enrich with club website
+    if dive.club_website is None and dive.club_name:
+        try:
+            result = search_club_website(dive.club_name)
+            if result.get("success") and result.get("club_website"):
+                dive.club_website = result["club_website"]
+        except Exception:
+            pass
+
+    # 7. Upsert to Convex
     payload = dive.model_dump(by_alias=True)
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{CONVEX_URL}/api/mutation",
-            json={
-                "path": "dives:upsertDive",
-                "args": payload,
-                "format": "json",
-            },
+            json={"path": "dives:upsertDive", "args": payload, "format": "json"},
         )
         resp.raise_for_status()
         result = resp.json()
@@ -279,7 +301,11 @@ async def upsert_dive(dive: Dive) -> Any:
             status_code=400, content={"error": result["error"], "convex_error": True}
         )
 
-    return result.get("value", result)
+    return {
+        "photo_storage_id": storage_id,
+        "dive": result.get("value", result),
+    }
+
 
 
 # ---------------------------------------------------------
@@ -312,23 +338,6 @@ async def get_dive_by_id(dive_id: str) -> Any:
         )
 
     return result
-
-
-# ---------------------------------------------------------
-# Search Club Endpoint
-# ---------------------------------------------------------
-
-
-@app.get("/search-club")
-def search_club(q: str = Query(..., description="Club name")) -> Any:
-    result = search_club_website(q)
-    if result.get("success"):
-        return result
-    return JSONResponse(
-        status_code=404 if "No results" in result.get("error", "") else 500,
-        content=result,
-    )
-
 
 # ---------------------------------------------------------
 # Run

@@ -19,11 +19,12 @@ This backend is designed to support a modern dive‑logging application where th
 
 ### ✅ **Dive Upsert API**
 
-Create or update a dive entry using `/dives/upsert`.  
+Create or update a dive entry using `/dives/upsert`.
 The backend will automatically:
 
 *   Geocode the location (if missing latitude/longitude)
 *   Generate an OpenStreetMap link (`osm_link`)
+*   Look up the club website (if `club_website` not provided)
 *   Validate all required dive metadata
 *   Store the dive record in your Convex deployment
 
@@ -45,14 +46,16 @@ The endpoint `/search-club` searches the internet for the official website of a 
 
 Upload dive photos as proof of your dive—a digital replacement for the traditional stamp in paper logbooks. Photos are stored in Convex's built-in file storage and linked to dive records.
 
-*   **POST `/upload-photo`** — Upload an image (JPEG, PNG, BMP) and receive a `photo_storage_id`
-*   **GET `/download-photo/{storage_id}`** — Retrieve a stored photo by its storage ID
-*   The `photo_storage_id` is a **required field** when creating/updating dives via `/dives/upsert`
+**Recommended: Single-request workflow**
+*   **POST `/dives/upsert-with-photo`** — Upload photo + dive data together (multipart form)
+*   Photo is automatically linked to the dive record
 
-**Workflow:**
-1.  Upload a photo via `/upload-photo`
-2.  Receive the `photo_storage_id` in the response
-3.  Include this ID when submitting the dive record
+**Alternative: Two-step workflow**
+*   **POST `/upload-photo`** — Upload image, receive `photo_storage_id`
+*   **POST `/dives/upsert`** — Submit dive with the `photo_storage_id`
+
+**Retrieve photos:**
+*   **GET `/download-photo/{storage_id}`** — Download a stored photo
 
 ### 🔗 **Combined Metadata Resolver**
 
@@ -164,6 +167,18 @@ CONVEX_URL=https://friendly-finch-619.convex.cloud uv run pytest -k real_convex 
 
 Upload a dive photo (JPEG, PNG, BMP). Returns `{ "photo_storage_id": "..." }`.
 
+### **POST /dives/upsert-with-photo** ⭐ Recommended
+
+Combined endpoint: upload photo and create dive in **one request**.
+
+```bash
+curl -X POST /dives/upsert-with-photo \
+  -F "file=@dive.jpg" \
+  -F 'dive_data={"user_id":"u1","dive_number":1,"dive_date":1704067200,...}'
+```
+
+Returns `{ "photo_storage_id": "...", "dive": {...} }`.
+
 ### **GET /download-photo/{storage_id}**
 
 Download a stored photo by its Convex storage ID.
@@ -174,7 +189,7 @@ Returns coordinates, OSM link, and website for a given location & club.
 
 ### **POST /dives/upsert**
 
-Creates or updates a dive record in Convex. Requires `photo_storage_id` from `/upload-photo`.
+Creates or updates a dive record in Convex. Requires `photo_storage_id` from `/upload-photo`. Auto-enriches missing coordinates, OSM link, and club website.
 
 ### **GET /dives/{id}**
 
