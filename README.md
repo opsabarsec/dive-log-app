@@ -1,142 +1,230 @@
 ![Dive Log App Hero Image](./assets/hero-dive.jpg)
 
-# Dive Log App
+Dive log app. Get your own free and Open Source dive logger without having to buy again a paper booklet.
 
-A full-stack dive log application built with Convex backend and modern web technologies for tracking and logging scuba diving sessions.
+# 🐬 DiveLog Backend
 
-## Overview
+A FastAPI backend for managing scuba dive logs, powered by Convex as the database, with built‑in geolocation, club website lookup, and automated metadata enrichment.
 
-Dive Log App is a real-time dive logging platform that allows divers to record their dive sessions, track buddies, monitor dive statistics, and maintain a comprehensive dive journal. You only need to register with your Google account and you are ready to go.
+This backend is designed to support a modern dive‑logging application where the user can enter intuitive, human‑friendly information (e.g., **“Lady Elliot Island”**, **“Portofino Divers”**) and the server automatically resolves:
 
-## Features
+*   🌍 Geographic coordinates via **Nominatim (OpenStreetMap)**
+*   🗺️ OpenStreetMap visualization links
+*   🏢 Dive club website using a custom scraper service
+*   🗃️ Stable storage in **Convex** via typed schemas and mutations
 
-- **Interactive Location Picker**: Select dive locations using an interactive map with Leaflet + OpenStreetMap + Geoapify
-  - Click-to-select locations on map
-  - Search with autocomplete geocoding
-  - Drag markers to fine-tune position
-  - Automatic reverse geocoding for addresses
-  - GPS coordinates stored with each dive
-- **Dive Logging**: Record comprehensive dive details including depth, duration, temperature, visibility, and conditions
-- **A photo and a webpage instead of a stamp**: To certify dives clubs normally have a stamp for paper logbooks. For each dive in this electronic form, you add the name of the club. A link to the club webpage can be entered manually but it is also suggested by the app through search API. To further verify it and to make great memories each dive is certified the verification photo is required. The photo is added to convex storage and the link to the photo is stored in the backend.
-- **Safety checks**: On top of the above logging fields this app has a simple check for each logged dive: buddy check done and briefing done/received.
-  with the explanation for both. This reminds the diver of the essential safety procedures at every log.
-- **Statistics**: Monitor total dives, depths, and dive history
-- **Cloud Backend**: Scalable Convex database with real-time updates
-- **Responsive UI**: Works on desktop and mobile devices
+***
 
-## Tech Stack
+## ✨ Features
 
-- **Frontend**: React / Next.js 14
-- **Backend**: Convex
-- **Database**: Convex Real-time Database
-- **Authentication**: Convex Auth
-- **Styling**: Tailwind CSS / shadcn/ui
-- **UI Components**: PrimeReact
-- **Maps**: Leaflet + react-leaflet
-- **Map Data**: OpenStreetMap via Geoapify
-- **Geocoding**: Geoapify API
+### ✅ **Dive Upsert API**
 
-## Getting Started
+Create or update a dive entry using `/dives/upsert`.  
+The backend will automatically:
 
-### Prerequisites
+*   Geocode the location (if missing latitude/longitude)
+*   Generate an OpenStreetMap link (`osm_link`)
+*   Validate all required dive metadata
+*   Store the dive record in your Convex deployment
 
-- Node.js 16+
-- npm or yarn
-- Convex account
-- Geoapify API key (free tier: 3,000 requests/day)
+### 🌍 **Geolocation Service**
 
-### Installation
+Located in `app/services/geolocation.py`, featuring:
+
+*   Nominatim search for coordinates
+*   1 request/second rate limiting
+*   24h in-memory caching
+*   Automatic OSM link builder
+*   Helpful User-Agent and optional email per Nominatim policy
+
+### 🔍 **Dive Club Website Search**
+
+The endpoint `/search-club` searches the internet for the official website of a dive club.
+
+### 🔗 **Combined Metadata Resolver**
+
+The endpoint `/resolve-dive-metadata` takes:
+
+```json
+{
+  "location_name": "Portofino, Italy",
+  "club_name": "Portofino Divers"
+}
+```
+
+and returns:
+
+*   Latitude & longitude
+*   OpenStreetMap link
+*   Club website
+*   Cleaned metadata
+
+Perfect for auto‑filling frontend die log forms.
+
+***
+
+## 🏗️ Project Structure
+
+    app/
+     ├── main.py                  # FastAPI app & endpoints
+     ├── services/
+     │     ├── geolocation.py     # async geocoder + caching + OSM link builder
+     │     └── search_club_website.py
+     └── tests/
+           └── test_dive_upsert.py
+    convex/
+     ├── schema.ts                # Convex schema (TypeScript)
+     └── dives.ts                 # Convex mutations & queries
+
+***
+
+## 🚀 Installation
+
+### 1. Clone the repository
 
 ```bash
-# Clone the repository
-git clone https://github.com/opsabarsec/dive-log-app.git
-cd dive-log-app
-
-# Install dependencies
-npm install
-
-# Configure environment variables
-# Copy .env.example to .env.local and add your API keys
-cp .env.example .env.local
-# Add your Geoapify API key to .env.local
-
-# Setup Convex
-npx convex dev
-
-# Start the development server
-npm run dev
+git clone https://github.com/<your-username>/<repo>.git
+cd <repo>
 ```
 
-The app will be available at `http://localhost:3000`
-
-### Demo Pages
-
-- **Map Demo**: `http://localhost:3000` - Interactive location picker demo
-- **Dive Form**: `http://localhost:3000/demo-form` - Complete dive logging form with map integration
-
-## Project Structure
-
-```
-dive-log-app/
-├── app/                    # Next.js 14 app directory
-│   ├── page.tsx           # Map demo page
-│   └── demo-form/         # Dive form demo
-├── components/
-│   ├── map/               # Map components (LocationPicker, BaseMap)
-│   └── forms/             # Form components (DiveForm)
-├── lib/
-│   ├── geocoding.ts       # Geoapify API utilities
-│   └── types/             # TypeScript type definitions
-├── convex/                # Convex backend
-│   ├── schema.ts          # Database schema
-│   └── dives.ts           # Dive mutations/queries
-├── assets/                # Static assets
-├── package.json
-├── .env.local            # Environment variables (local)
-├── tsconfig.json
-└── next.config.js
-```
-
-## Development
-
-### Running the Development Server
+### 2. Create a virtual environment
 
 ```bash
-npm run dev
+uv venv
+source .venv/bin/activate  # or .\.venv\Scripts\activate on Windows
 ```
 
-### Building for Production
+### 3. Install dependencies
 
 ```bash
-npm run build
-npm start
+uv pip install -r requirements.txt
 ```
 
-## Deployment
+***
 
-The application can be deployed to Vercel or other hosting platforms:
+## 🔧 Environment Variables
 
-1. Push to GitHub
-2. Connect to Vercel
-3. Set environment variables
-4. Deploy
+Create a `.env` file in the project root:
 
-## Documentation
+```env
+CONVEX_URL=https://<your-convex-deployment>.convex.cloud
+MY_EMAIL=you@example.com
+```
 
-- **[MAP_IMPLEMENTATION.md](MAP_IMPLEMENTATION.md)** - Complete guide to map components and setup
-- **[LOCATION_INTEGRATION.md](LOCATION_INTEGRATION.md)** - How to integrate location data with Convex
-- **[PRIMEREACT_SETUP.md](PRIMEREACT_SETUP.md)** - PrimeReact component library setup and usage
-- Convex API functions are documented in the `convex/` directory
+*   `MY_EMAIL` is used for Nominatim User‑Agent compliance
+*   `CONVEX_URL` points to your Convex instance
+
+***
+
+## ▶️ Running the Server
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## 🧪 Testing
+
+Run all tests:
+
+```bash
+uv run pytest -v
+```
+
+Run integration tests with real Convex:
+
+```bash
+CONVEX_URL=https://friendly-finch-619.convex.cloud uv run pytest -k real_convex -v -s
+```
+
+***
+
+## 📡 API Endpoints Overview
+
+### **POST /resolve-dive-metadata**
+
+Returns coordinates, OSM link, and website for a given location & club.
+
+### **POST /dives/upsert**
+
+Creates or updates a dive record in Convex.
+
+### **GET /dives/{id}**
+
+Retrieves a stored dive.
+
+### **GET /search-club?q=Club Name**
+
+Returns the official dive club website, if found.
+
+***
+
+## 🗺️ How Geolocation Works
+
+Your backend uses:
+
+*   `aiohttp` for async HTTP requests
+*   Rate limiter to avoid Nominatim blocking
+*   In-memory TTL cache
+*   Cleaned user input (`location_name`)
+*   Automatic OSM link generation
+
+Example link:
+
+    https://www.openstreetmap.org/?mlat=44.303&mlon=9.209#map=16/44.303/9.209
+
+***
+
+## 🏛️ Convex Integration
+
+Dive schema includes:
+
+*   Required dive metadata
+*   Optional attributes (notes, site, temperature, etc.)
+*   Auto-updated fields: `logged_at`, `updated_at`
+*   New field: `osm_link`
+
+Convex table is typed and indexed via `schema.ts` and `dives.ts`.
+
+Deploy updated schema:
+
+```bash
+npx convex deploy
+```
+
+***
+
+## 🤖 Combined Metadata Workflow
+
+The frontend can now:
+
+1.  Call `/resolve-dive-metadata` with location & club name
+2.  Pre-fill the dive form with returned metadata
+3.  Submit the completed dive via `/dives/upsert`
+
+Smooth user experience + clean backend = 💙
+
+***
+
+## 📦 Roadmap
+
+*   🌐 Add Redis-backed geolocation cache
+*   🧭 Add bounding box or multi-match geolocation
+*   📍 Full dive-site database integration
+*   🔐 API keys & auth layer
+*   🗺️ Built-in static map previews
+*   📊 Analytics on dive locations
+
+***
 
 ## Contributing
 
 Contributions are welcome! Please follow the standard GitHub flow:
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1.  Fork the repository
+2.  Create a feature branch
+3.  Commit your changes
+4.  Push to the branch
+5.  Create a Pull Request
 
 ## License
 
@@ -148,8 +236,8 @@ For issues or questions, please open a GitHub issue or contact the maintainer.
 
 ## Author
 
-Marco Berta - [GitHub](https://github.com/opsabarsec)
+Marco Berta - <https://github.com/opsabarsec>
 
----
+***
 
-**Stay safe and happy diving!**
+**Stay safe and happy diving!** 🐠🌊🌍

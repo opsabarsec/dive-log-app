@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx convex run clearDives:clearAllDives)",
+      "Bash(uv sync:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(CONVEX_URL=https://test.convex.cloud uv run pytest:*)",
+      "Bash(export CONVEX_URL=https://friendly-finch-619.convex.cloud)",
+      "Bash(uv pip install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx convex:*)",
+      "Bash(uv run python:*)"
+    ]
+  }
+}
