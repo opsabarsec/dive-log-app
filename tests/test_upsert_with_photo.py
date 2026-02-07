@@ -40,6 +40,7 @@ def _get_sample_dive_data() -> dict:
         "suit_thickness": 3.0,
         "lead_weights": 4.0,
         "notes": "Integration test dive",
+        "mode": "scubadiving",
     }
 
 
@@ -75,8 +76,11 @@ def test_upsert_with_photo_success() -> None:
     assert body["photo_storage_id"], "photo_storage_id should not be empty"
 
     # Verify dive data is returned with ID
-    assert "dive" in body
-    assert "id" in body["dive"], "Response should contain dive ID"
+    assert "dive" in body, f"Response missing 'dive' key. Body: {body}"
+    assert isinstance(body["dive"], dict), (
+        f"dive should be dict, got {type(body['dive'])}: {body['dive']}"
+    )
+    assert "id" in body["dive"], f"Response should contain dive ID. dive object: {body['dive']}"
 
     # Fetch the dive from Convex to verify auto-filled fields
     dive_id = body["dive"]["id"]
@@ -152,3 +156,53 @@ def test_upsert_with_photo_missing_required_fields() -> None:
     body = resp.json()
     assert "error" in body
     assert "Invalid dive data" in body["error"]
+
+
+def test_upsert_with_photo_invalid_mode() -> None:
+    """Test that invalid mode values are rejected."""
+    _require_convex_env()
+
+    dive_data = _get_sample_dive_data()
+    dive_data["mode"] = "snorkeling"
+
+    file_path = Path(__file__).parent.parent / "assets" / "dive001.jpg"
+
+    with open(file_path, "rb") as f:
+        resp = client.post(
+            "/dives/upsert-with-photo",
+            files={"file": (file_path.name, f, "image/jpeg")},
+            data={"dive_data": json.dumps(dive_data)},
+        )
+
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+    body = resp.json()
+    assert "error" in body
+    assert "mode must be" in body["error"]
+
+
+def test_upsert_with_photo_freediving_mode() -> None:
+    """Test that freediving mode is accepted."""
+    _require_convex_env()
+
+    dive_data = _get_sample_dive_data()
+    dive_data["mode"] = "freediving"
+    dive_data["dive_number"] = 12  # Different number to avoid conflict
+
+    file_path = Path(__file__).parent.parent / "assets" / "dive001.jpg"
+
+    with open(file_path, "rb") as f:
+        resp = client.post(
+            "/dives/upsert-with-photo",
+            files={"file": (file_path.name, f, "image/jpeg")},
+            data={"dive_data": json.dumps(dive_data)},
+        )
+
+    assert resp.status_code == status.HTTP_200_OK
+    body = resp.json()
+
+    # Verify mode is stored correctly
+    dive_id = body["dive"]["id"]
+    get_resp = client.get(f"/dives/{dive_id}")
+    assert get_resp.status_code == status.HTTP_200_OK
+    dive_record = get_resp.json()
+    assert dive_record["mode"] == "freediving"

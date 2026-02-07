@@ -37,6 +37,7 @@ class DiveInput(BaseModel):
     max_depth: float
     club_name: str
     instructor_name: str
+    mode: str = "scubadiving"
 
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -64,6 +65,13 @@ class DiveInput(BaseModel):
             except ValueError:
                 raise ValueError(f"Invalid date format: {v}. Use 'YYYY-MM-DD' or epoch timestamp.")
         raise ValueError(f"dive_date must be int or string, got {type(v)}")
+
+    @field_validator("mode")
+    @classmethod
+    def validate_mode(cls, v: str) -> str:
+        if v not in ["scubadiving", "freediving"]:
+            raise ValueError(f"mode must be 'scubadiving' or 'freediving', got {v}")
+        return v
 
 
 class Dive(DiveInput):
@@ -363,14 +371,34 @@ async def upsert_dive_with_photo(
         resp.raise_for_status()
         result = resp.json()
 
+    # Check for Convex errors in multiple formats
     if "error" in result:
         return JSONResponse(
             status_code=400, content={"error": result["error"], "convex_error": True}
         )
 
+    if result.get("status") == "error":
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": result.get("errorMessage", "Unknown Convex error"),
+                "convex_error": True,
+            },
+        )
+
+    # Extract the actual mutation result from Convex response
+    dive_result = result.get("value", result)
+
+    # Ensure the result has an id field
+    if not isinstance(dive_result, dict) or "id" not in dive_result:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Invalid response from Convex: {dive_result}", "convex_error": True},
+        )
+
     return {
         "photo_storage_id": storage_id,
-        "dive": result.get("value", result),
+        "dive": dive_result,
     }
 
 

@@ -32,6 +32,8 @@ const schema = defineSchema({
     Buddy_check: v.boolean(),
     Briefed: v.boolean(),
 
+    mode: v.string(),
+
     // Server–managed timestamps
     logged_at: v.number(),
     updated_at: v.number(),

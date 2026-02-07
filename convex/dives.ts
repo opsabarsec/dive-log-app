@@ -31,6 +31,8 @@ export const upsertDive = mutation({
     // Flags
     Buddy_check: v.boolean(),
     Briefed: v.boolean(),
+
+    mode: v.string(),
   },
   handler: async (ctx, args) => {
     const { user_id, dive_number } = args;
