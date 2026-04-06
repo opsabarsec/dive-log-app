@@ -507,13 +507,24 @@ async function submitNewDive(event) {
     }
     try {
       const uploadResp = await fetch(`${DIVES_API}/upload-photos`, { method: 'POST', body: formData });
-      if (uploadResp.ok) {
+      // Accept 200 (all ok) and 207 (partial success — some files uploaded, some failed)
+      if (uploadResp.ok || uploadResp.status === 207) {
         const uploadData = await uploadResp.json();
         photoStorageIds = uploadData.photo_storage_ids || [];
+        if (uploadData.failed_files && uploadData.failed_files.length > 0) {
+          console.warn('[upload-photos] some files failed:', uploadData.failed_files);
+          showToast(`${photoStorageIds.length} photo(s) uploaded, ${uploadData.failed_files.length} failed`, 'error');
+        }
       } else {
-        const errText = await uploadResp.text();
-        console.error('[upload-photos] failed:', errText);
-        showToast('Photo upload failed', 'error');
+        const errData = await uploadResp.json().catch(() => ({}));
+        // Even on 500, try to recover any partial storage IDs
+        photoStorageIds = errData.photo_storage_ids || [];
+        console.error('[upload-photos] failed:', errData);
+        if (photoStorageIds.length === 0) {
+          showToast('Photo upload failed — unsupported format? Try JPEG or PNG', 'error');
+        } else {
+          showToast(`${photoStorageIds.length} photo(s) uploaded with errors`, 'error');
+        }
       }
     } catch (err) {
       console.error('[upload-photos] network error:', err);

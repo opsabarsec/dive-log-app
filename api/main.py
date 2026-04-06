@@ -120,7 +120,7 @@ CONVEX_AUTH_TOKEN = os.getenv("CONVEX_AUTH_TOKEN", "").strip()  # optional (Conv
 
 @app.post("/upload-photo", response_model=None)
 async def upload_photo(file: UploadFile = File(...)) -> dict[str, str] | JSONResponse:
-    allowed = {"image/png", "image/jpeg", "image/bmp"}
+    allowed = {"image/png", "image/jpeg", "image/bmp", "image/webp", "image/heic", "image/heif"}
     if file.content_type not in allowed:
         return JSONResponse(
             status_code=400, content={"error": f"Unsupported file type: {file.content_type}"}
@@ -183,7 +183,7 @@ async def upload_photos(files: list[UploadFile] = File(...)) -> dict[str, list[s
         - HTTP 207 with partial results if some files failed
         - HTTP 500 with error details if all files failed
     """
-    allowed = {"image/png", "image/jpeg", "image/bmp"}
+    allowed = {"image/png", "image/jpeg", "image/bmp", "image/webp", "image/heic", "image/heif"}
     storage_ids: list[str] = []
     failed_files: list[dict] = []
 
@@ -316,7 +316,7 @@ async def identify_fish_endpoint(file: UploadFile = File(...)) -> dict | JSONRes
     """
     Identify fish species in an uploaded image using Fishial AI.
     """
-    allowed = {"image/png", "image/jpeg", "image/bmp"}
+    allowed = {"image/png", "image/jpeg", "image/bmp", "image/webp", "image/heic", "image/heif"}
     if file.content_type not in allowed:
         return JSONResponse(
             status_code=400, content={"error": f"Unsupported file type: {file.content_type}"}
