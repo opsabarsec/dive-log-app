@@ -191,11 +191,18 @@ async def upload_photos(files: list[UploadFile] = File(...)) -> dict[str, list[s
 
     # Pre-validate all files
     for file in files:
-        if file.content_type not in allowed:
+        content_type = file.content_type or ""
+        # Also check file extension as fallback for mobile browsers
+        filename_lower = (file.filename or "").lower()
+        is_image = (
+            content_type in allowed
+            or filename_lower.endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".heic", ".heif"))
+        )
+        if not is_image:
             failed_files.append(
                 {
                     "file": file.filename or "unknown",
-                    "error": f"Unsupported file type: {file.content_type}",
+                    "error": f"Unsupported file type: {content_type}",
                 }
             )
 
@@ -206,7 +213,13 @@ async def upload_photos(files: list[UploadFile] = File(...)) -> dict[str, list[s
             headers["Authorization"] = f"Bearer {CONVEX_AUTH_TOKEN}"
 
         for file in files:
-            if file.content_type not in allowed:
+            content_type = file.content_type or ""
+            filename_lower = (file.filename or "").lower()
+            is_image = (
+                content_type in allowed
+                or filename_lower.endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp", ".heic", ".heif"))
+            )
+            if not is_image:
                 continue
 
             # Read file content
