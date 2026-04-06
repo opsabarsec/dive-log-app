@@ -24,6 +24,8 @@ app.add_middleware(
     allow_origins=[
         "https://opsabarsec.github.io",
         "https://opsabarsec.github.io/opsabarsec.github.io-divelog",
+        "https://opsabarsec-github-io-divelog.vercel.app",
+        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
