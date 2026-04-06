@@ -38,8 +38,8 @@ app.add_middleware(
 
 class Dive(BaseModel):
     user_id: str
-    dive_number: Optional[int] = None       # scuba dives only
-    freedive_number: Optional[int] = None   # freedives only
+    dive_number: Optional[int] = None  # scuba dives only
+    freedive_number: Optional[int] = None  # freedives only
     dive_date: int
     location: str
     duration: float
@@ -67,9 +67,9 @@ class Dive(BaseModel):
 
 class Certification(BaseModel):
     user_id: str
-    name: str                              # e.g., "Open Water Diver"
-    agency: str                            # e.g., "PADI", "SSI"
-    certification_date: int                # Unix timestamp in milliseconds
+    name: str  # e.g., "Open Water Diver"
+    agency: str  # e.g., "PADI", "SSI"
+    certification_date: int  # Unix timestamp in milliseconds
     certification_number: Optional[str] = None
     instructor_name: Optional[str] = None
     dive_center: Optional[str] = None
@@ -180,72 +180,97 @@ async def upload_photos(files: list[UploadFile] = File(...)) -> dict[str, list[s
 
     Output:
         - {"photo_storage_ids": ["id1", "id2", ...]} on success
-        - JSONResponse with error details on failure
+        - HTTP 207 with partial results if some files failed
+        - HTTP 500 with error details if all files failed
     """
     allowed = {"image/png", "image/jpeg", "image/bmp"}
     storage_ids: list[str] = []
+    failed_files: list[dict] = []
 
+    # Pre-validate all files
     for file in files:
         if file.content_type not in allowed:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": f"Unsupported file type: {file.content_type} for file {file.filename}"
-                },
+            failed_files.append(
+                {
+                    "file": file.filename or "unknown",
+                    "error": f"Unsupported file type: {file.content_type}",
+                }
             )
 
-    for file in files:
-        file_bytes = await file.read()
+    # Use a single httpx client for connection pooling
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=30.0)) as client:
+        headers = {"Content-Type": "application/json"}
+        if CONVEX_AUTH_TOKEN:
+            headers["Authorization"] = f"Bearer {CONVEX_AUTH_TOKEN}"
 
-        # STEP 1: Get signed upload URL
-        try:
-            async with httpx.AsyncClient() as client:
-                headers = {"Content-Type": "application/json"}
-                if CONVEX_AUTH_TOKEN:
-                    headers["Authorization"] = f"Bearer {CONVEX_AUTH_TOKEN}"
+        for file in files:
+            if file.content_type not in allowed:
+                continue
 
+            # Read file content
+            try:
+                file_bytes = await file.read()
+            except Exception as e:
+                failed_files.append(
+                    {"file": file.filename or "unknown", "error": f"Read failed: {str(e)}"}
+                )
+                continue
+
+            # STEP 1: Get signed upload URL
+            signed_url = None
+            try:
                 url_resp = await client.post(
                     f"{CONVEX_URL}/api/run/files.js/generateUploadUrl",
                     headers=headers,
                     json={"args": {}, "format": "json"},
                 )
                 url_resp.raise_for_status()
-
                 result = url_resp.json()
                 signed_url = result.get("value")
                 if not signed_url or not isinstance(signed_url, str):
-                    return JSONResponse(
-                        status_code=500, content={"error": f"Invalid URL: {result}"}
+                    failed_files.append(
+                        {"file": file.filename or "unknown", "error": "Invalid URL from Convex"}
                     )
-        except Exception as e:
-            return JSONResponse(status_code=500, content={"error": f"Mutation failed: {str(e)}"})
+                    continue
+            except Exception as e:
+                failed_files.append(
+                    {
+                        "file": file.filename or "unknown",
+                        "error": f"Failed to get upload URL: {str(e)}",
+                    }
+                )
+                continue
 
-        # STEP 2: Upload file to signed URL
-        try:
-            async with httpx.AsyncClient() as client:
-                content_type: str = file.content_type or "application/octet-stream"
+            # STEP 2: Upload file to signed URL
+            try:
+                content_type = file.content_type or "application/octet-stream"
                 upload_resp = await client.post(
                     signed_url, headers={"Content-Type": content_type}, content=file_bytes
                 )
                 upload_resp.raise_for_status()
-
                 result = upload_resp.json()
                 storage_id = result.get("storageId")
                 if not storage_id:
-                    return JSONResponse(
-                        status_code=500,
-                        content={
-                            "error": f"No storageId for file {file.filename}",
-                            "result": result,
-                        },
+                    failed_files.append(
+                        {"file": file.filename or "unknown", "error": "No storageId in response"}
                     )
+                    continue
                 storage_ids.append(storage_id)
-        except Exception as e:
-            return JSONResponse(
-                status_code=500, content={"error": f"Upload failed for {file.filename}: {str(e)}"}
-            )
+            except Exception as e:
+                failed_files.append(
+                    {"file": file.filename or "unknown", "error": f"Upload failed: {str(e)}"}
+                )
+                continue
 
-    return {"photo_storage_ids": storage_ids}
+    # Return results with appropriate status code
+    response_data: dict[str, Any] = {"photo_storage_ids": storage_ids}
+    if failed_files:
+        response_data["failed_files"] = failed_files
+        if storage_ids:
+            return JSONResponse(status_code=207, content=response_data)
+        return JSONResponse(status_code=500, content=response_data)
+
+    return response_data
 
 
 # ---------------------------------------------------------
@@ -262,13 +287,19 @@ async def download_photo(storage_id: str) -> RedirectResponse | JSONResponse:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{CONVEX_URL}/api/query",
-                json={"path": "files:getFileUrl", "args": {"storageId": storage_id}, "format": "json"},
+                json={
+                    "path": "files:getFileUrl",
+                    "args": {"storageId": storage_id},
+                    "format": "json",
+                },
             )
             resp.raise_for_status()
             data = resp.json()
             url = data.get("value")
             if not url:
-                return JSONResponse(status_code=404, content={"error": f"No URL for storage ID '{storage_id}'"})
+                return JSONResponse(
+                    status_code=404, content={"error": f"No URL for storage ID '{storage_id}'"}
+                )
     except Exception as e:
         return JSONResponse(status_code=404, content={"error": str(e)})
 
@@ -659,7 +690,9 @@ async def get_profile_photo() -> Response:
     # Look for the photo in assets folder
     photo_path = Path("assets") / photo_filename
     if not photo_path.exists():
-        return JSONResponse(status_code=404, content={"error": f"Photo not found: {photo_filename}"})
+        return JSONResponse(
+            status_code=404, content={"error": f"Photo not found: {photo_filename}"}
+        )
 
     # Determine content type
     ext = photo_path.suffix.lower()
@@ -726,7 +759,11 @@ async def create_checklist(payload: ChecklistCreate) -> Any:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{CONVEX_URL}/api/mutation",
-            json={"path": "checklists:createChecklist", "args": payload.model_dump(), "format": "json"},
+            json={
+                "path": "checklists:createChecklist",
+                "args": payload.model_dump(),
+                "format": "json",
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -754,7 +791,11 @@ async def get_checklist_by_id(checklist_id: str) -> Any:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{CONVEX_URL}/api/query",
-            json={"path": "checklists:getChecklistById", "args": {"id": checklist_id}, "format": "json"},
+            json={
+                "path": "checklists:getChecklistById",
+                "args": {"id": checklist_id},
+                "format": "json",
+            },
         )
         resp.raise_for_status()
         data = resp.json()
@@ -762,7 +803,9 @@ async def get_checklist_by_id(checklist_id: str) -> Any:
         return JSONResponse(status_code=400, content={"error": data["error"]})
     result = data.get("value")
     if result is None:
-        return JSONResponse(status_code=404, content={"error": f"Checklist '{checklist_id}' not found"})
+        return JSONResponse(
+            status_code=404, content={"error": f"Checklist '{checklist_id}' not found"}
+        )
     return result
 
 
@@ -781,7 +824,9 @@ async def update_checklist(checklist_id: str, payload: ChecklistUpdate) -> Any:
         resp.raise_for_status()
         data = resp.json()
     if "error" in data or data.get("status") == "error":
-        return JSONResponse(status_code=400, content={"error": data.get("error") or data.get("errorMessage")})
+        return JSONResponse(
+            status_code=400, content={"error": data.get("error") or data.get("errorMessage")}
+        )
     return data.get("value", data)
 
 
@@ -790,12 +835,18 @@ async def delete_checklist(checklist_id: str) -> Any:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{CONVEX_URL}/api/mutation",
-            json={"path": "checklists:deleteChecklist", "args": {"id": checklist_id}, "format": "json"},
+            json={
+                "path": "checklists:deleteChecklist",
+                "args": {"id": checklist_id},
+                "format": "json",
+            },
         )
         resp.raise_for_status()
         data = resp.json()
     if "error" in data or data.get("status") == "error":
-        return JSONResponse(status_code=400, content={"error": data.get("error") or data.get("errorMessage")})
+        return JSONResponse(
+            status_code=400, content={"error": data.get("error") or data.get("errorMessage")}
+        )
     return data.get("value", data)
 
 

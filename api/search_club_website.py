@@ -50,10 +50,15 @@ def search_club_website(query: str) -> Dict[str, Any]:
         html = response.text
 
         # Pattern 1: Main result link <a class="result__a" href="...">
-        result_match = re.search(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"', html)
+        # Find all result__a links
+        result_matches = re.findall(r'<a[^>]*class="result__a"[^>]*href="([^"]+)"', html)
 
-        if result_match:
-            url = result_match.group(1)
+        for href in result_matches:
+            url = href
+
+            # Skip ad links (DuckDuckGo internal like y.js)
+            if "duckduckgo.com" in url and ("y.js" in url or "aclick" in url):
+                continue
 
             # Extract from DuckDuckGo redirect (uddg= parameter)
             uddg_match = re.search(r"uddg=([^&]+)", url)
