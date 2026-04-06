@@ -72,17 +72,6 @@ The frontend is a single-page app served as static files from [GitHub Pages](htt
 ### File layout
 
 ```
-frontend/
-├── index.html   # single HTML file — all modals and views
-├── app.js       # all UI logic — rendering, API calls, state
-└── styles.css   # CSS variables, responsive layout, lightbox, card styles
-```
-
----
-
-## Project structure
-
-```
 dive-log-app/
 ├── app/
 │   ├── main.py (or divelog.py)         # FastAPI app — all dive endpoints
@@ -97,8 +86,16 @@ dive-log-app/
 │   └── files.ts                         # photo storage
 ├── frontend/
 │   ├── index.html
+│   ├── config.js
+│   ├── utils.js
+│   ├── image-utils.js
+│   ├── dives.js
+│   ├── certifications.js
+│   ├── checklists.js
+│   ├── ui.js
 │   ├── app.js
-│   └── styles.css
+│   ├── styles.css
+│   └── README.md
 └── tests/
 ```
 
