@@ -460,6 +460,10 @@ function closeAddDiveModal() {
 async function submitNewDive(event) {
   event.preventDefault();
 
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Saving...';
+
   let photoStorageIds = [];
   let fishNotes = '';
   const photoFiles = document.getElementById('dive-photos').files;
@@ -569,6 +573,9 @@ async function submitNewDive(event) {
   } catch (err) {
     showToast('Failed to save dive', 'error');
     console.error(err);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Save Dive';
   }
 }
 
