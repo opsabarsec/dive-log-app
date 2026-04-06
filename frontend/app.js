@@ -455,6 +455,8 @@ function closeAddDiveModal() {
   document.getElementById('add-dive-modal-title').textContent = 'Log New Dive';
   document.getElementById('add-dive-modal').classList.remove('active');
   document.getElementById('add-dive-modal').querySelector('form').reset();
+  // Clear file input explicitly (needed for mobile browsers)
+  document.getElementById('dive-photos').value = '';
 }
 
 async function submitNewDive(event) {
@@ -507,28 +509,75 @@ async function submitNewDive(event) {
     }
     try {
       const uploadResp = await fetch(`${DIVES_API}/upload-photos`, { method: 'POST', body: formData });
+      
+      // Log full response for debugging
+      console.log('[upload-photos] Status:', uploadResp.status, uploadResp.statusText);
+      
       // Accept 200 (all ok) and 207 (partial success — some files uploaded, some failed)
       if (uploadResp.ok || uploadResp.status === 207) {
         const uploadData = await uploadResp.json();
+        console.log('[upload-photos] Success response:', uploadData);
         photoStorageIds = uploadData.photo_storage_ids || [];
         if (uploadData.failed_files && uploadData.failed_files.length > 0) {
           console.warn('[upload-photos] some files failed:', uploadData.failed_files);
           showToast(`${photoStorageIds.length} photo(s) uploaded, ${uploadData.failed_files.length} failed`, 'error');
         }
       } else {
-        const errData = await uploadResp.json().catch(() => ({}));
+        let errData = {};
+        try {
+          errData = await uploadResp.json();
+        } catch (e) {
+          console.error('[upload-photos] Failed to parse error response:', e);
+          errData = { error: `HTTP ${uploadResp.status}: ${uploadResp.statusText}` };
+        }
+        
         // Even on 500, try to recover any partial storage IDs
         photoStorageIds = errData.photo_storage_ids || [];
         console.error('[upload-photos] failed:', errData);
-        if (photoStorageIds.length === 0) {
-          showToast('Photo upload failed — unsupported format? Try JPEG or PNG', 'error');
-        } else {
-          showToast(`${photoStorageIds.length} photo(s) uploaded with errors`, 'error');
-        }
+        
+        // Show detailed error message
+        const errorMsg = errData.error || errData.failed_files?.map(f => `${f.file}: ${f.error}`).join(', ') || 'Unknown error';
+        showToast(`Photo upload failed: ${errorMsg}`, 'error');
       }
     } catch (err) {
       console.error('[upload-photos] network error:', err);
-      showToast('Photo upload error', 'error');
+      showToast(`Photo upload error: ${err.message}`, 'error');
+    }
+    try {
+      const uploadResp = await fetch(`${DIVES_API}/upload-photos`, { method: 'POST', body: formData });
+      
+      // Log full response for debugging
+      console.log('[upload-photos] Status:', uploadResp.status, uploadResp.statusText);
+      
+      // Accept 200 (all ok) and 207 (partial success — some files uploaded, some failed)
+      if (uploadResp.ok || uploadResp.status === 207) {
+        const uploadData = await uploadResp.json();
+        console.log('[upload-photos] Success response:', uploadData);
+        photoStorageIds = uploadData.photo_storage_ids || [];
+        if (uploadData.failed_files && uploadData.failed_files.length > 0) {
+          console.warn('[upload-photos] some files failed:', uploadData.failed_files);
+          showToast(`${photoStorageIds.length} photo(s) uploaded, ${uploadData.failed_files.length} failed`, 'error');
+        }
+      } else {
+        let errData = {};
+        try {
+          errData = await uploadResp.json();
+        } catch (e) {
+          console.error('[upload-photos] Failed to parse error response:', e);
+          errData = { error: `HTTP ${uploadResp.status}: ${uploadResp.statusText}` };
+        }
+        
+        // Even on 500, try to recover any partial storage IDs
+        photoStorageIds = errData.photo_storage_ids || [];
+        console.error('[upload-photos] failed:', errData);
+        
+        // Show detailed error message
+        const errorMsg = errData.error || errData.failed_files?.map(f => `${f.file}: ${f.error}`).join(', ') || 'Unknown error';
+        showToast(`Photo upload failed: ${errorMsg}`, 'error');
+      }
+    } catch (err) {
+      console.error('[upload-photos] network error:', err);
+      showToast(`Photo upload error: ${err.message}`, 'error');
     }
   }
 
